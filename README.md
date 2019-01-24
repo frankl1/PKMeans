@@ -8,4 +8,5 @@ The dataset is composed of a set of csv files in which each line is a data point
 hadoop jar pkmeans.jar PKMeans input output
 - *input* is the dataset folder
 - *output* is the name of the output folder
- Running the program will create output_1, ouput_2, ..., output_i where *i* is the number of iteration of KMeans
+ 
+ Running the program will create output_1, ouput_2, ..., output_i where *i* is the number of iterations of KMeans
