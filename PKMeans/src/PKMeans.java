@@ -22,10 +22,11 @@ public class PKMeans {
 	private Random random;
 	private Logger logger = Logger.getLogger(PKMeansMapper.class);
 	public static DecimalFormat dFormater = new DecimalFormat("0.000");
+	private int nb_iter;
 
 	public static void main(String[] args) {
 		try {
-			PKMeans pkMeans = new PKMeans(2, 8, 1e-3, "inputs", "outputs");
+			PKMeans pkMeans = new PKMeans(2, 8, 1e-3, args[0], args[1]);
 			pkMeans.run();
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
@@ -42,6 +43,7 @@ public class PKMeans {
 		this.nb_dimensions = nb_dimensions;
 		this.random = new Random(8513);
 		this.centers = new ArrayList<double[]>();
+		this.nb_iter = 1;
 		this.initCenters();
 		PKMeansReducer.centers.addAll(centers);
 		PKMeansCombiner.nb_dimensions = this.nb_dimensions;
@@ -62,7 +64,7 @@ public class PKMeans {
 
 		// TODO: specify input and output DIRECTORIES (not files)
 		FileInputFormat.setInputPaths(job, new Path(this.src));
-		FileOutputFormat.setOutputPath(job, new Path(this.out));
+		FileOutputFormat.setOutputPath(job, new Path(this.out+"_" + this.nb_iter));
 	}
 
 	public void initCenters() {
@@ -76,7 +78,6 @@ public class PKMeans {
 	}
 
 	public void run() throws Exception {
-		int nb_iter = 1;
 		do {
 			deleteOutput();
 			initJob();
@@ -87,12 +88,12 @@ public class PKMeans {
 			if (!job.waitForCompletion(true))
 				logger.info("job failed");
 			nb_iter++;
-			logger.error("\n#iter=" + nb_iter + "\n");
-			logger.error("\tOld_centers: " + centersToString(centers) + "\n");
-			logger.error("\tNew_centers: " + centersToString(PKMeansReducer.centers)+"\n");
+			logger.info("\n#iter=" + nb_iter + "\n");
+			logger.info("\tOld_centers: " + centersToString(centers) + "\n");
+			logger.info("\tNew_centers: " + centersToString(PKMeansReducer.centers)+"\n");
 		} while (isDifferent(centers, PKMeansReducer.centers));
-		logger.error("Old_centers: " + centersToString(centers) + "\n");
-		logger.error("New_centers: " + centersToString(PKMeansReducer.centers));
+		logger.info("Old_centers: " + centersToString(centers) + "\n");
+		logger.info("New_centers: " + centersToString(PKMeansReducer.centers));
 	}
 
 	public String centersToString(ArrayList<double[]> centers) {
