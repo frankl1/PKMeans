@@ -1,9 +1,16 @@
-import java.io.File;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Random;
 
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.OptionBuilder;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
@@ -23,11 +30,26 @@ public class PKMeans {
 	private Logger logger = Logger.getLogger(PKMeansMapper.class);
 	public static DecimalFormat dFormater = new DecimalFormat("0.000");
 	private int nb_iter;
+	private FileSystem fs;
+	private static Options options;
 
 	public static void main(String[] args) {
 		try {
-			PKMeans pkMeans = new PKMeans(2, 8, 1e-3, args[0], args[1]);
+			createOptions();
+			CommandLineParser parser = new BasicParser();
+			CommandLine cmd = parser.parse(options, args);
+
+			double eps = Double.parseDouble(cmd.getOptionValue("epsilon", "1e-3"));
+			int k = Integer.parseInt(cmd.getOptionValue('k'));
+			int d = Integer.parseInt(cmd.getOptionValue('d'));
+			String input = cmd.getOptionValue("input");
+			String output = cmd.getOptionValue("output");
+
+			PKMeans pkMeans = new PKMeans(k, d, eps, input, output);
 			pkMeans.run();
+		} catch (ParseException e) {
+			HelpFormatter formatter = new HelpFormatter();
+			formatter.printHelp("PKMeans", options, true);
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -35,7 +57,7 @@ public class PKMeans {
 		}
 	}
 
-	public PKMeans(int nb_clusters, int nb_dimensions, double epsilon, String src, String out) throws Exception{
+	public PKMeans(int nb_clusters, int nb_dimensions, double epsilon, String src, String out) throws Exception {
 		this.epsilon = epsilon;
 		this.src = src;
 		this.out = out;
@@ -49,9 +71,27 @@ public class PKMeans {
 		PKMeansCombiner.nb_dimensions = this.nb_dimensions;
 		PKMeansReducer.nb_dimensions = this.nb_dimensions;
 	}
-	
-	public void initJob()  throws Exception {
+
+	@SuppressWarnings("static-access")
+	public static void createOptions() {
+		options = new Options();
+		options.addOption(OptionBuilder.withArgName("NB_CLUSTERS").hasArg().withDescription("The number of clusters").withType(1)
+				.isRequired(true).create("k"));
+		options.addOption(
+				OptionBuilder.withArgName("DIM").hasArg().withDescription("The number of dimensions of each data point")
+						.withType(1).isRequired(true).create("d"));
+		options.addOption(OptionBuilder.withLongOpt("input").withArgName("IN").hasArg()
+				.withDescription("The folder that contains the dataset files").isRequired(true).create("i"));
+		options.addOption(OptionBuilder.withLongOpt("output").withArgName("OUT").hasArg()
+				.withDescription("The folder where the output will be written").isRequired(true).create("o"));
+		options.addOption(OptionBuilder.withLongOpt("epsilon").withArgName("EPS").hasArg()
+				.withDescription("The number of decimals to consider while comparing decimal. ex: 1e-3").withType(1e-3)
+				.isRequired(false).create("e"));
+	}
+
+	public void initJob() throws Exception {
 		conf = new Configuration();
+		fs = FileSystem.get(new Configuration());
 		job = Job.getInstance(conf, "JobName");
 		job.setJarByClass(PKMeans.class);
 
@@ -64,7 +104,7 @@ public class PKMeans {
 
 		// TODO: specify input and output DIRECTORIES (not files)
 		FileInputFormat.setInputPaths(job, new Path(this.src));
-		FileOutputFormat.setOutputPath(job, new Path(this.out+"_" + this.nb_iter));
+		FileOutputFormat.setOutputPath(job, new Path(this.out));
 	}
 
 	public void initCenters() {
@@ -79,8 +119,8 @@ public class PKMeans {
 
 	public void run() throws Exception {
 		do {
-			deleteOutput();
 			initJob();
+			deleteOutputDirIfExists();
 			centers.clear();
 			centers.addAll(PKMeansReducer.centers);
 			PKMeansMapper.centers.clear();
@@ -90,10 +130,9 @@ public class PKMeans {
 			nb_iter++;
 			logger.info("\n#iter=" + nb_iter + "\n");
 			logger.info("\tOld_centers: " + centersToString(centers) + "\n");
-			logger.info("\tNew_centers: " + centersToString(PKMeansReducer.centers)+"\n");
+			logger.info("\tNew_centers: " + centersToString(PKMeansReducer.centers) + "\n");
 		} while (isDifferent(centers, PKMeansReducer.centers));
-		logger.info("Old_centers: " + centersToString(centers) + "\n");
-		logger.info("New_centers: " + centersToString(PKMeansReducer.centers));
+		logger.info("Finished in " + nb_iter + " iterations");
 	}
 
 	public String centersToString(ArrayList<double[]> centers) {
@@ -124,19 +163,9 @@ public class PKMeans {
 		return false;
 	}
 
-	public void deleteOutput() {
+	public void deleteOutputDirIfExists() {
 		try {
-			File index = new File(this.out);
-			String[] entries = index.list();
-
-			if (entries == null)
-				return;
-
-			for (String s : entries) {
-				File currentFile = new File(index.getPath(), s);
-				currentFile.delete();
-			}
-			index.delete();
+			fs.delete(new Path(this.out), true);
 		} catch (Exception e) {
 			logger.error(e.getMessage());
 		}
