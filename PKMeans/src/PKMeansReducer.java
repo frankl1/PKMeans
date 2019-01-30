@@ -5,11 +5,13 @@ import java.util.ArrayList;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.log4j.Logger;
 
 public class PKMeansReducer extends Reducer<LongWritable, Text, LongWritable, Text> {
 	public static int nb_dimensions;
 	public static ArrayList<double[]> centers = new ArrayList<>();
 	public static DecimalFormat dFormater = new DecimalFormat("#.###");
+	private Logger logger = Logger.getLogger(PKMeansMapper.class);
 	
 	public void reduce(LongWritable _key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
 		double center[] = new double[nb_dimensions], sample[] = new double[nb_dimensions];
@@ -19,6 +21,10 @@ public class PKMeansReducer extends Reducer<LongWritable, Text, LongWritable, Te
 		}
 		for (Text val : values) {
 			last_comma_index = val.toString().lastIndexOf(",");
+			if (last_comma_index < 1) {
+				logger.info("\n---->\nNo comma found in text: " + val.toString()+"\n----->\n");
+				continue;
+			}
 			sample = getSample(val.toString().substring(0, last_comma_index));
 			for (int i=0; i < nb_dimensions; i++) {
 				center[i] += sample[i];
